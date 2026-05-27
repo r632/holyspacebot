@@ -248,7 +248,7 @@ async def launches(ctx, limit: int = 5):
     SPECIAL_USER_ID = 892136136749776916
 
     if ctx.author.id == SPECIAL_USER_ID:
-        await ctx.send("🔭 Récupération des {limit} prochains lancements, mon maître et créateur! :3")
+        await ctx.send(f"🔭 Récupération des {limit} prochains lancements, mon maître et créateur! :3")
     else:
         await ctx.send(f"🔭 Récupération des {limit} prochains lancements ... :3")
 
