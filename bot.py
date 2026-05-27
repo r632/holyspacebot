@@ -112,10 +112,13 @@ def format_launch_embed(launch: dict) -> discord.Embed:
     }
     color = color_map.get(status, discord.Color.blurple())
 
+    slug = launch.get("slug", "")
+    nsf_url = f"https://nextspaceflight.com/launches?search={slug}" if slug else "https://nextspaceflight.com/launches"
+
     embed = discord.Embed(
         title=f"🚀 {name}",
         color=color,
-        url=f"https://ll.thespacedevs.com/2.3.0/launches/{launch.get('id', '')}/",
+        url=nsf_url,
     )
     embed.add_field(name="📅 Date de lancement", value=date_str, inline=False)
     embed.add_field(name="📊 Statut", value=status, inline=True)
