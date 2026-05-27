@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 import aiohttp
 import asyncio
 import sqlite3
@@ -23,7 +24,23 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+now = datetime.now(timezone.utc)
 
+launches = [
+    l for l in launches
+    if l.get("net")
+]
+
+def is_future_launch(launch):
+    net = launch.get("net")
+    if not net:
+        return False
+    try:
+        dt = datetime.fromisoformat(net.replace("Z", "+00:00"))
+        return dt > datetime.now(timezone.utc)
+    except:
+        return False
+        
 # ── Base de données ────────────────────────────────────────────────────────────
 
 def init_db():
@@ -247,7 +264,22 @@ async def cmd_launches(ctx, limit: int = 5):
 @bot.command(name="next", aliases=["prochain"])
 async def cmd_next(ctx):
     """!next — Affiche le prochain lancement."""
-    launches = await fetch_upcoming_launches(limit=1)
+    launches = await fetch_upcoming_launches(limit=10)
+
+    launches = [
+        l for l in launches
+        if is_future_launch(l)
+    ]
+
+    if not launches:
+        await ctx.send("❌ Aucun lancement futur trouvé.")
+        return
+
+    launches.sort(
+        key=lambda l: l["net"]
+    )
+
+    await ctx.send(embed=format_launch_embed(launches[0]))
     if not launches:
         await ctx.send("❌ Impossible de récupérer le lancement pour le moment.")
         return
