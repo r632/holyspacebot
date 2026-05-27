@@ -258,15 +258,23 @@ async def launches(ctx, limit: int = 5):
 
 @bot.command()
 async def next(ctx):
-    launches = await fetch_upcoming_launches(1)
-    if not launches:
-        await ctx.send("❌ Aucun lancement")
-        return
+    launches = await fetch_upcoming_launches(10)
 
-    embed = format_launch_embed(launches[0])
-    if embed:
-        await ctx.send(embed=embed)
+    now = datetime.now(timezone.utc)
 
+    for launch in launches:
+        net = launch.get("net")
+        dt = parse_utc(net)
+
+        if not dt or dt < now:
+            continue
+
+        embed = format_launch_embed(launch)
+        if embed:
+            await ctx.send(embed=embed)
+            return
+
+    await ctx.send("❌ Aucun prochain lancement trouvé")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
