@@ -245,8 +245,12 @@ async def on_ready():
 @bot.command()
 async def launches(ctx, limit: int = 5):
     limit = max(1, min(limit, 10))
+    SPECIAL_USER_ID = 892136136749776916
 
-    await ctx.send(f"🔭 Récupération des {limit} prochains lancements valides...")
+    if ctx.author.id == SPECIAL_USER_ID:
+        await ctx.send("🔭 Récupération des {limit} prochains lancements, mon maître et créateur! :3")
+    else:
+        await ctx.send(f"🔭 Récupération des {limit} prochains lancements ... :3")
 
     launches = await fetch_upcoming_launches(limit=20)  # on prend plus large
     now = datetime.now(timezone.utc)
@@ -281,6 +285,12 @@ async def launches(ctx, limit: int = 5):
 
 @bot.command()
 async def next(ctx):
+    SPECIAL_USER_ID = 892136136749776916
+
+    if ctx.author.id == SPECIAL_USER_ID:
+        await ctx.send("Voici le prochain lancement, mon maître et créateur! :3")
+    else:
+        await ctx.send("Voici le prochain lancement :3 🚀")
     launches = await fetch_upcoming_launches(10)
 
     now = datetime.now(timezone.utc)
@@ -310,7 +320,7 @@ async def reset(ctx):
 async def spacehelp(ctx):
     embed = discord.Embed(
         title="🚀 Space Bot",
-        description="Bot de suivi des lancements spatiaux",
+        description="Bot de suivi des lancements spatiaux :3",
         color=discord.Color.blurple()
     )
 
