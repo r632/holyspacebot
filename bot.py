@@ -115,7 +115,7 @@ def format_launch_embed(launch: dict) -> discord.Embed:
     embed = discord.Embed(
         title=f"🚀 {name}",
         color=color,
-        url=f"https://nextspaceflight.com/launches/details/{launch.get('id', '')}",
+        url=f"https://ll.thespacedevs.com/2.3.0/launches/{launch.get('id', '')}/",
     )
     embed.add_field(name="📅 Date de lancement", value=date_str, inline=False)
     embed.add_field(name="📊 Statut", value=status, inline=True)
