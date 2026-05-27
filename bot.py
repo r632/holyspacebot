@@ -18,6 +18,8 @@ CHECK_INTERVAL_HOURS = int(os.getenv("CHECK_INTERVAL_HOURS", "6"))
 DB_PATH = os.getenv("DB_PATH", "/data/launches.db" if os.path.isdir("/data") else "launches.db")
 
 intents = discord.Intents.default()
+intents.message_content = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -112,13 +114,9 @@ def format_launch_embed(launch: dict) -> discord.Embed:
     }
     color = color_map.get(status, discord.Color.blurple())
 
-    slug = launch.get("slug", "")
-    nsf_url = f"https://nextspaceflight.com/launches?search={slug}" if slug else "https://nextspaceflight.com/launches"
-
     embed = discord.Embed(
         title=f"🚀 {name}",
         color=color,
-        url=nsf_url,
     )
     embed.add_field(name="📅 Date de lancement", value=date_str, inline=False)
     embed.add_field(name="📊 Statut", value=status, inline=True)
