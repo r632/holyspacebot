@@ -245,14 +245,37 @@ async def on_ready():
 @bot.command()
 async def launches(ctx, limit: int = 5):
     limit = max(1, min(limit, 10))
-    await ctx.send(f"🔭 Récupération des {limit} prochains lancements...")
 
-    launches = await fetch_upcoming_launches(limit)
+    await ctx.send(f"🔭 Récupération des {limit} prochains lancements valides...")
+
+    launches = await fetch_upcoming_launches(limit=20)  # on prend plus large
+    now = datetime.now(timezone.utc)
+
+    valid = []
 
     for launch in launches:
+        net = launch.get("net")
+        dt = parse_utc(net)
+
+        # filtre : date invalide ou passée
+        if not dt or dt < now:
+            continue
+
         embed = format_launch_embed(launch)
-        if embed:
-            await ctx.send(embed=embed)
+        if not embed:
+            continue
+
+        valid.append(embed)
+
+        if len(valid) >= limit:
+            break
+
+    if not valid:
+        await ctx.send("❌ Aucun lancement valide trouvé.")
+        return
+
+    for embed in valid:
+        await ctx.send(embed=embed)
         await asyncio.sleep(0.5)
 
 
