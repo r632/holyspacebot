@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands, tasks
+from zoneinfo import ZoneInfo
 import aiohttp
 import asyncio
 import sqlite3
@@ -95,13 +96,32 @@ def format_launch_embed(launch: dict) -> discord.Embed:
     status = launch.get("status", {}).get("name", "Inconnu")
     net    = launch.get("net", "")
 
-    date_str = "Date inconnue"
-    if net:
-        try:
-            dt = datetime.fromisoformat(net.replace("Z", "+00:00"))
-            date_str = f"<t:{int(dt.timestamp())}:F>"
-        except Exception:
-            date_str = net
+date_str = "Date inconnue"
+
+if net:
+    try:
+        # Date UTC venant de l'API
+        dt_utc = datetime.fromisoformat(net.replace("Z", "+00:00"))
+
+        # Conversion heure de Paris
+        dt_paris = dt_utc.astimezone(ZoneInfo("Europe/Paris"))
+
+        # Format FR lisible
+        mois_fr = [
+            "janvier", "février", "mars", "avril", "mai", "juin",
+            "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+        ]
+
+        date_str = (
+            f"{dt_paris.day} "
+            f"{mois_fr[dt_paris.month - 1]} "
+            f"{dt_paris.year} à "
+            f"{dt_paris.strftime('%H:%M')} "
+            f"(heure de Paris)"
+        )
+
+    except Exception:
+        date_str = net
 
     color_map = {
         "Go for Launch": discord.Color.green(),
