@@ -96,32 +96,32 @@ def format_launch_embed(launch: dict) -> discord.Embed:
     status = launch.get("status", {}).get("name", "Inconnu")
     net    = launch.get("net", "")
 
-date_str = "Date inconnue"
+    date_str = "Date inconnue"
 
-if net:
-    try:
-        # Date UTC venant de l'API
-        dt_utc = datetime.fromisoformat(net.replace("Z", "+00:00"))
+    if net:
+        try:
+            # Date UTC venant de l'API
+            dt_utc = datetime.fromisoformat(net.replace("Z", "+00:00"))
 
-        # Conversion heure de Paris
-        dt_paris = dt_utc.astimezone(ZoneInfo("Europe/Paris"))
+            # Conversion heure de Paris
+            dt_paris = dt_utc.astimezone(ZoneInfo("Europe/Paris"))
 
-        # Format FR lisible
-        mois_fr = [
-            "janvier", "février", "mars", "avril", "mai", "juin",
-            "juillet", "août", "septembre", "octobre", "novembre", "décembre"
-        ]
+            # Format FR lisible
+            mois_fr = [
+                "janvier", "février", "mars", "avril", "mai", "juin",
+                "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+            ]
 
-        date_str = (
-            f"{dt_paris.day} "
-            f"{mois_fr[dt_paris.month - 1]} "
-            f"{dt_paris.year} à "
-            f"{dt_paris.strftime('%H:%M')} "
-            f"(heure de Paris)"
-        )
+            date_str = (
+                f"{dt_paris.day} "
+                f"{mois_fr[dt_paris.month - 1]} "
+                f"{dt_paris.year} à "
+                f"{dt_paris.strftime('%H:%M')} "
+                f"(heure de Paris)"
+            )
 
-    except Exception:
-        date_str = net
+        except Exception:
+            date_str = net
 
     color_map = {
         "Go for Launch": discord.Color.green(),
@@ -132,43 +132,64 @@ if net:
         "Hold":          discord.Color.red(),
         "In Flight":     discord.Color.teal(),
     }
+
     color = color_map.get(status, discord.Color.blurple())
 
     embed = discord.Embed(
         title=f"🚀 {name}",
         color=color,
     )
+
     embed.add_field(name="📅 Date de lancement", value=date_str, inline=False)
     embed.add_field(name="📊 Statut", value=status, inline=True)
 
     rocket_name = (launch.get("rocket") or {}).get("configuration", {}).get("full_name") \
-               or (launch.get("rocket") or {}).get("configuration", {}).get("name", "Inconnu")
+        or (launch.get("rocket") or {}).get("configuration", {}).get("name", "Inconnu")
+
     embed.add_field(name="🛸 Fusée", value=rocket_name, inline=True)
 
     lsp_name = (launch.get("launch_service_provider") or {}).get("name", "Inconnu")
     embed.add_field(name="🏢 Opérateur", value=lsp_name, inline=True)
 
-    pad      = launch.get("pad") or {}
+    pad = launch.get("pad") or {}
     location = pad.get("location") or {}
     pad_name = pad.get("name", "Inconnu")
     loc_name = location.get("name", "")
-    embed.add_field(name="📍 Site", value=f"{pad_name}\n{loc_name}" if loc_name else pad_name, inline=True)
+
+    embed.add_field(
+        name="📍 Site",
+        value=f"{pad_name}\n{loc_name}" if loc_name else pad_name,
+        inline=True
+    )
 
     mission = launch.get("mission")
     if mission:
         mtype = mission.get("type", "")
         mdesc = mission.get("description", "")
+
         if mtype:
             embed.add_field(name="🎯 Type de mission", value=mtype, inline=True)
+
         if mdesc:
-            embed.add_field(name="📝 Description", value=mdesc[:300] + ("..." if len(mdesc) > 300 else ""), inline=False)
+            embed.add_field(
+                name="📝 Description",
+                value=mdesc[:300] + ("..." if len(mdesc) > 300 else ""),
+                inline=False
+            )
 
     image = launch.get("image")
-    image_url = (image.get("image_url") or image.get("thumbnail_url")) if isinstance(image, dict) else (image if isinstance(image, str) else None)
+    image_url = (
+        image.get("image_url") or image.get("thumbnail_url")
+        if isinstance(image, dict)
+        else image if isinstance(image, str)
+        else None
+    )
+
     if image_url:
         embed.set_thumbnail(url=image_url)
 
     embed.set_footer(text="Données : TheSpaceDevs / NextSpaceFlight.com")
+
     return embed
 
 
