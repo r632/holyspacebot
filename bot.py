@@ -100,7 +100,6 @@ def parse_utc(net_str: str):
 
     dt = datetime.fromisoformat(net_str.replace("Z", "+00:00"))
 
-    # 🔥 force UTC si naïf
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
 
@@ -121,7 +120,61 @@ def format_date_paris(dt_utc: datetime) -> str:
     )
 
 
-# ── EMBED ─────────────────────────────────────────────
+def format_countdown(dt_utc: datetime) -> str:
+    """Retourne un compte à rebours lisible."""
+    now = datetime.now(timezone.utc)
+    delta = dt_utc - now
+
+    if delta.total_seconds() <= 0:
+        return "Maintenant"
+
+    total_seconds = int(delta.total_seconds())
+
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+
+    parts = []
+
+    if days > 0:
+        parts.append(f"{days}j")
+
+    if hours > 0 or days > 0:
+        parts.append(f"{hours}h")
+
+    parts.append(f"{minutes}m")
+
+    return "dans " + " ".join(parts)
+
+
+def format_window_duration(window_start, window_end):
+    """Formate la durée de fenêtre de lancement."""
+    if not window_start or not window_end:
+        return "Inconnue"
+
+    start = parse_utc(window_start)
+    end = parse_utc(window_end)
+
+    if not start or not end:
+        return "Inconnue"
+
+    delta = end - start
+
+    if delta.total_seconds() <= 0:
+        return "Instantanée"
+
+    total_minutes = int(delta.total_seconds() // 60)
+
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+
+    return f"{minutes}m"
+
+
+# ── EMBEDS ─────────────────────────────────────────────
 
 def format_launch_embed(launch: dict):
     name = launch.get("name", "Lancement inconnu")
@@ -130,13 +183,14 @@ def format_launch_embed(launch: dict):
 
     dt_utc = parse_utc(net)
 
-    # skip si date invalide ou passée
     if dt_utc:
         if dt_utc < datetime.now(timezone.utc):
             return None
         date_str = format_date_paris(dt_utc)
+        countdown = format_countdown(dt_utc)
     else:
         date_str = "Date inconnue"
+        countdown = "Inconnu"
 
     color_map = {
         "Go for Launch": discord.Color.green(),
@@ -154,6 +208,7 @@ def format_launch_embed(launch: dict):
     )
 
     embed.add_field(name="📅 Date", value=date_str, inline=False)
+    embed.add_field(name="⏱️ Compte à rebours", value=countdown, inline=True)
     embed.add_field(name="📊 Statut", value=status, inline=True)
 
     rocket = ((launch.get("rocket") or {})
@@ -178,21 +233,76 @@ def format_launch_embed(launch: dict):
     )
 
     mission = launch.get("mission")
+
+    orbit = "Inconnue"
+
     if mission:
+        orbit_data = mission.get("orbit")
+
+        if isinstance(orbit_data, dict):
+            orbit = orbit_data.get("abbrev") or orbit_data.get("name", "Inconnue")
+        elif isinstance(orbit_data, str):
+            orbit = orbit_data
+
         if mission.get("type"):
             embed.add_field(name="🎯 Type", value=mission["type"], inline=True)
+
+        embed.add_field(name="🌍 Orbite", value=orbit, inline=True)
 
         if mission.get("description"):
             desc = mission["description"][:300]
             if len(mission["description"]) > 300:
                 desc += "..."
             embed.add_field(name="📝 Mission", value=desc, inline=False)
+    else:
+        embed.add_field(name="🌍 Orbite", value=orbit, inline=True)
+
+    window_duration = format_window_duration(
+        launch.get("window_start"),
+        launch.get("window_end")
+    )
+
+    embed.add_field(
+        name="🪟 Fenêtre de lancement",
+        value=window_duration,
+        inline=True
+    )
 
     image = launch.get("image")
     if isinstance(image, dict):
         embed.set_thumbnail(url=image.get("image_url") or image.get("thumbnail_url"))
 
     embed.set_footer(text="Données : TheSpaceDevs / NextSpaceFlight")
+    return embed
+
+
+def format_urgent_alert_embed(launch: dict):
+    """Embed rouge pour les lancements dans moins de 2h."""
+    name = launch.get("name", "Lancement inconnu")
+    net = launch.get("net")
+
+    dt_utc = parse_utc(net)
+
+    if not dt_utc:
+        return None
+
+    remaining = dt_utc - datetime.now(timezone.utc)
+
+    if remaining.total_seconds() <= 0 or remaining.total_seconds() > 7200:
+        return None
+
+    embed = discord.Embed(
+        title="🚨 LANCEMENT IMMINENT 🚨",
+        description=f"**{name}** décolle {format_countdown(dt_utc)} !",
+        color=discord.Color.red()
+    )
+
+    embed.add_field(
+        name="📅 Heure",
+        value=format_date_paris(dt_utc),
+        inline=False
+    )
+
     return embed
 
 
@@ -206,24 +316,45 @@ async def check_launches():
         return
 
     launches = await fetch_upcoming_launches(limit=10)
-    new = 0
+    new_launches = []
+    urgent_alerts = []
 
     for launch in launches:
         launch_id = launch.get("id")
+
         if not launch_id or is_announced(launch_id):
             continue
 
         embed = format_launch_embed(launch)
+
         if not embed:
             continue
 
-        await channel.send(embed=embed)
+        new_launches.append(embed)
+
+        urgent_embed = format_urgent_alert_embed(launch)
+        if urgent_embed:
+            urgent_alerts.append(urgent_embed)
+
         mark_announced(launch_id)
 
-        new += 1
+    # nouveaux lancements d'abord
+    for embed in new_launches:
+        await channel.send(embed=embed)
         await asyncio.sleep(1)
 
-    print(f"🚀 {new} nouveaux lancements." if new else "ℹ️ Aucun nouveau lancement.")
+    # alertes ensuite
+    for embed in urgent_alerts:
+        await channel.send(embed=embed)
+        await asyncio.sleep(1)
+
+    total_new = len(new_launches)
+
+    print(
+        f"🚀 {total_new} nouveaux lancements."
+        if total_new else
+        "ℹ️ Aucun nouveau lancement."
+    )
 
 
 # ── EVENTS ─────────────────────────────────────────────
@@ -252,7 +383,7 @@ async def launches(ctx, limit: int = 5):
     else:
         await ctx.send(f"🔭 Récupération des {limit} prochains lancements ... :3")
 
-    launches = await fetch_upcoming_launches(limit=20)  # on prend plus large
+    launches = await fetch_upcoming_launches(limit=20)
     now = datetime.now(timezone.utc)
 
     valid = []
@@ -261,11 +392,11 @@ async def launches(ctx, limit: int = 5):
         net = launch.get("net")
         dt = parse_utc(net)
 
-        # filtre : date invalide ou passée
         if not dt or dt < now:
             continue
 
         embed = format_launch_embed(launch)
+
         if not embed:
             continue
 
@@ -291,6 +422,7 @@ async def next(ctx):
         await ctx.send("Voici le prochain lancement, mon maître et créateur! :3")
     else:
         await ctx.send("Voici le prochain lancement :3 🚀")
+
     launches = await fetch_upcoming_launches(10)
 
     now = datetime.now(timezone.utc)
@@ -303,11 +435,18 @@ async def next(ctx):
             continue
 
         embed = format_launch_embed(launch)
+
         if embed:
             await ctx.send(embed=embed)
+
+            urgent_embed = format_urgent_alert_embed(launch)
+            if urgent_embed:
+                await ctx.send(embed=urgent_embed)
+
             return
 
     await ctx.send("❌ Aucun prochain lancement trouvé")
+
 
 @bot.command()
 @commands.has_permissions(administrator=True)
