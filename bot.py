@@ -36,6 +36,13 @@ def init_db():
                 announced_at TEXT
             )
         """)
+
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS urgent_alerted (
+                launch_id TEXT PRIMARY KEY,
+                alerted_at TEXT
+            )
+        """)
         con.commit()
 
 
@@ -56,9 +63,27 @@ def mark_announced(launch_id: str):
         con.commit()
 
 
+def is_urgent_alerted(launch_id: str) -> bool:
+    with sqlite3.connect(DB_PATH) as con:
+        return con.execute(
+            "SELECT 1 FROM urgent_alerted WHERE launch_id = ?",
+            (launch_id,)
+        ).fetchone() is not None
+
+
+def mark_urgent_alerted(launch_id: str):
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute(
+            "INSERT OR IGNORE INTO urgent_alerted (launch_id, alerted_at) VALUES (?, datetime('now'))",
+            (launch_id,)
+        )
+        con.commit()
+
+
 def reset_announced():
     with sqlite3.connect(DB_PATH) as con:
         con.execute("DELETE FROM announced")
+        con.execute("DELETE FROM urgent_alerted")
         con.commit()
 
 
@@ -306,7 +331,7 @@ def format_urgent_alert_embed(launch: dict):
     return embed
 
 
-# ── LOOP ─────────────────────────────────────────────
+# ── LOOPS ─────────────────────────────────────────────
 
 @tasks.loop(hours=CHECK_INTERVAL_HOURS)
 async def check_launches():
@@ -317,7 +342,6 @@ async def check_launches():
 
     launches = await fetch_upcoming_launches(limit=10)
     new_launches = []
-    urgent_alerts = []
 
     for launch in launches:
         launch_id = launch.get("id")
@@ -331,30 +355,44 @@ async def check_launches():
             continue
 
         new_launches.append(embed)
-
-        urgent_embed = format_urgent_alert_embed(launch)
-        if urgent_embed:
-            urgent_alerts.append(urgent_embed)
-
         mark_announced(launch_id)
 
-    # nouveaux lancements d'abord
     for embed in new_launches:
         await channel.send(embed=embed)
         await asyncio.sleep(1)
 
-    # alertes ensuite
-    for embed in urgent_alerts:
-        await channel.send(embed=embed)
-        await asyncio.sleep(1)
-
     total_new = len(new_launches)
-
     print(
         f"🚀 {total_new} nouveaux lancements."
         if total_new else
         "ℹ️ Aucun nouveau lancement."
     )
+
+
+@tasks.loop(minutes=10)
+async def check_urgent_launches():
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        return
+
+    launches = await fetch_upcoming_launches(limit=10)
+
+    for launch in launches:
+        launch_id = launch.get("id")
+
+        if not launch_id or is_urgent_alerted(launch_id):
+            continue
+
+        urgent_embed = format_urgent_alert_embed(launch)
+
+        if not urgent_embed:
+            continue
+
+        await channel.send(embed=urgent_embed)
+        mark_urgent_alerted(launch_id)
+        await asyncio.sleep(1)
+
+    print("🚨 Vérification des alertes imminentes terminée.")
 
 
 # ── EVENTS ─────────────────────────────────────────────
@@ -369,6 +407,9 @@ async def on_ready():
 
     if not check_launches.is_running():
         check_launches.start()
+
+    if not check_urgent_launches.is_running():
+        check_urgent_launches.start()
 
 
 # ── COMMANDS ─────────────────────────────────────────────
@@ -424,7 +465,6 @@ async def next(ctx):
         await ctx.send("Voici le prochain lancement :3 🚀")
 
     launches = await fetch_upcoming_launches(10)
-
     now = datetime.now(timezone.utc)
 
     for launch in launches:
